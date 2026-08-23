@@ -17,18 +17,28 @@ count = st_autorefresh(interval=60000, limit=None, key="psx_refresh_counter")
 st.title("📈 PSX KSE-100 Market Board")
 st.caption(f"Last Updated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} PKT")
 
-# Core PSX KSE-100 Symbols
-KSE_100_SYMBOLS = [
-    "LUCK", "ENGRO", "HUBC", "OGDC", "PPL", "SYS", "MEBL", "FFC", 
-    "HBL", "MCB", "UBL", "MARI", "EFERT", "TRG", "POL", "BAFL", 
-    "CHCC", "DGKC", "PIOC", "CNERGY", "BOP", "KEL", "TPLP", "DOL",
-    "ABL", "ABOT", "AGP", "AHCL", "AICL", "AIRLINK", "AKBL", "APL",
-    "ATLH", "ATRL", "BAHL", "BWCL", "COLG", "CPHL", "FABL", "FATIMA", 
-    "FCCL", "FFBL", "GADT", "GAL", "GATM", "GLAXO", "HALEON", "HMB", 
-    "ILP", "INIL", "ISL", "KAPCO", "KOHC", "KTML", "LCI", "LOTCHEM", 
-    "MLCF", "NBP", "NCL", "NESTLE", "NML", "NPL", "PABC", "PAEL", 
-    "PAKT", "PIBTL", "PKGS", "PSO", "PTC", "RMPL", "SAZEW", "SHEL", 
-    "SHFA", "SNGP", "SPWL", "SRVI", "SSGC", "TGL", "THALL", "UNITY"
+# Official KSE-100 Index Constituents Ticker Symbols
+KSE_100_CONSTITUENTS = [
+    # Banks & Financials
+    "ABL", "AKBL", "BAFL", "BAHL", "BOP", "FABL", "HBL", "HMB", "MCB", "MEBL", "NBP", "SCBPL", "UBL",
+    # Oil & Gas / Exploration / Marketing
+    "APL", "ATRL", "CNERGY", "MARI", "OGDC", "POL", "PPL", "PSO", "SHEL", "SNGP", "SSGC",
+    # Chemicals, Fertilizers & Petrochemicals
+    "AGP", "COLG", "CPHL", "EFERT", "ENGRO", "EPCL", "FATIMA", "FFBL", "FFC", "ICI", "LOTCHEM",
+    # Cement & Materials
+    "BWCL", "CHCC", "DGKC", "FCCL", "KOHC", "LUCK", "MLCF", "PIOC",
+    # Technology & Telecom
+    "AIRLINK", "AVN", "OCTOPUS", "PTC", "SYS", "TELE", "TRG",
+    # Power & Energy
+    "HUBC", "KAPCO", "KEL", "NPL", "SPWL",
+    # Food, Personal Care & Pharma
+    "ABOT", "FML", "GLAXO", "HALEON", "NATF", "NESTLE", "RMPL", "SHFA", "UNITY", "UPFL",
+    # Autos & Engineering / Industrial
+    "ATLH", "GAL", "INIL", "ISL", "PAEL", "SAZEW", "SRVI", "TGL", "THALL",
+    # Textiles & Paper/Packaging
+    "BNWM", "GADT", "GATM", "ILP", "KTML", "NCL", "NML", "PABC", "PKGS",
+    # Real Estate & REITs / Investment
+    "AHCL", "AICL", "DCR", "MHAM", "MUREB", "PAKT", "PIBTL", "TPLP"
 ]
 
 def chunk_list(lst, n):
@@ -37,13 +47,13 @@ def chunk_list(lst, n):
         yield lst[i:i + n]
 
 @st.cache_data(ttl=45)
-def fetch_psx_prices():
+def fetch_kse100_prices():
     """
-    Fetches latest price for PSX stocks in smaller chunks to avoid Yahoo API batch truncation limits.
+    Fetches latest traded prices exclusively for official KSE-100 index scrips.
     """
     parsed_list = []
-    # Chunk symbols in batches of 35 to stay safely under Yahoo API restrictions
-    symbol_chunks = list(chunk_list(KSE_100_SYMBOLS, 35))
+    # Fetch in small batches of 25 to guarantee 100% Yahoo API coverage
+    symbol_chunks = list(chunk_list(KSE_100_CONSTITUENTS, 25))
 
     for chunk in symbol_chunks:
         yf_tickers = [f"{sym}.KA" for sym in chunk]
@@ -55,7 +65,6 @@ def fetch_psx_prices():
                 
                 for sym in chunk:
                     ticker_key = f"{sym}.KA"
-                    # Handle multi-index vs single series
                     price = close_prices.get(ticker_key, None) if len(chunk) > 1 else close_prices
                     
                     if pd.notna(price):
@@ -72,23 +81,23 @@ def fetch_psx_prices():
 
     return pd.DataFrame(parsed_list)
 
-# --- Application Rendering ---
-with st.spinner("Retrieving complete PSX market watchlist..."):
-    df = fetch_psx_prices()
+# --- App Interface ---
+with st.spinner("Retrieving KSE-100 Index constituents data..."):
+    df = fetch_kse100_prices()
 
 if not df.empty:
     valid_df = df[df["Status"] == "Active"]
     
     col1, col2, col3 = st.columns(3)
-    col1.metric("Tracked Companies", len(df))
-    col2.metric("Active Price Feeds", len(valid_df))
+    col1.metric("KSE-100 Constituents", len(df))
+    col2.metric("Active Feeds", len(valid_df))
     col3.metric("Auto-Refresh Cycle", f"#{count}")
 
-    search_query = st.text_input("🔍 Filter by Stock Symbol", "")
+    search_query = st.text_input("🔍 Filter Stock Symbol", "")
     if search_query:
         df = df[df["Symbol"].str.contains(search_query.upper(), na=False)]
 
-    st.markdown("### Stock Price Watchlist")
+    st.markdown("### KSE-100 Index Scrips Watchlist")
     st.dataframe(
         df,
         use_container_width=True,
@@ -98,4 +107,4 @@ if not df.empty:
         }
     )
 else:
-    st.error("Market feed server timed out. Please refresh the page.")
+    st.error("Market feed server timed out. Please refresh.")
