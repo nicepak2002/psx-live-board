@@ -17,9 +17,9 @@ count = st_autorefresh(interval=60000, limit=None, key="psx_refresh_counter")
 st.title("📈 PSX KSE-100 Market Board")
 st.caption(f"Last Updated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} PKT")
 
-# Official KSE-100 Index Constituents (Symbol to Full Company Name Mapping)
+# Official KSE-100 Index Constituents (100 Companies Mapping)
 KSE_100_DICT = {
-    # Banks & Financials
+    # Banks & Financials (13)
     "ABL": "Allied Bank Limited",
     "AKBL": "Askari Bank Limited",
     "BAFL": "Bank Alfalah Limited",
@@ -34,7 +34,7 @@ KSE_100_DICT = {
     "SCBPL": "Standard Chartered Bank (Pakistan) Limited",
     "UBL": "United Bank Limited",
     
-    # Oil & Gas / Exploration / Marketing
+    # Oil & Gas / Exploration / Marketing (11)
     "APL": "Attock Petroleum Limited",
     "ATRL": "Attock Refinery Limited",
     "CNERGY": "Cnergyico PK Limited",
@@ -47,7 +47,7 @@ KSE_100_DICT = {
     "SNGP": "Sui Northern Gas Pipelines Limited",
     "SSGC": "Sui Southern Gas Company Limited",
     
-    # Chemicals, Fertilizers & Petrochemicals
+    # Chemicals, Fertilizers & Petrochemicals (11)
     "AGP": "AGP Limited",
     "COLG": "Colgate-Palmolive (Pakistan) Limited",
     "CPHL": "Citi Pharma Limited",
@@ -60,7 +60,7 @@ KSE_100_DICT = {
     "ICI": "Lucky Core Industries Limited",
     "LOTCHEM": "Lotte Chemical Pakistan Limited",
     
-    # Cement & Building Materials
+    # Cement & Building Materials (9)
     "BWCL": "Bestway Cement Limited",
     "CHCC": "Cherat Cement Company Limited",
     "DGKC": "D.G. Khan Cement Company Limited",
@@ -69,8 +69,9 @@ KSE_100_DICT = {
     "LUCK": "Lucky Cement Limited",
     "MLCF": "Maple Leaf Cement Factory Limited",
     "PIOC": "Pioneer Cement Limited",
+    "POWER": "Power Cement Limited",
     
-    # Technology & Telecom
+    # Technology & Telecom (7)
     "AIRLINK": "Air Link Communication Limited",
     "AVN": "Avanceon Limited",
     "OCTOPUS": "Octopus Digital Limited",
@@ -79,37 +80,44 @@ KSE_100_DICT = {
     "TELE": "Telecard Limited",
     "TRG": "TRG Pakistan Limited",
     
-    # Power & Energy
+    # Power & Energy (5)
     "HUBC": "The Hub Power Company Limited",
     "KAPCO": "Kot Addu Power Company Limited",
     "KEL": "K-Electric Limited",
     "NPL": "Nishat Power Limited",
     "SPWL": "Saif Power Limited",
     
-    # Food, Personal Care & Pharma
+    # Food, Personal Care & Pharmaceuticals (14)
     "ABOT": "Abbott Laboratories (Pakistan) Limited",
+    "FFL": "Fauji Foods Limited",
     "FML": "FrieslandCampina Engro Pakistan Limited",
     "GLAXO": "GlaxoSmithKline Pakistan Limited",
     "HALEON": "Haleon Pakistan Limited",
+    "HINL": "Highnoon Laboratories Limited",
     "NATF": "National Foods Limited",
     "NESTLE": "Nestlé Pakistan Limited",
     "RMPL": "Rafhan Maize Products Company Limited",
+    "SEARL": "The Searle Company Limited",
     "SHFA": "Shifa International Hospitals Limited",
     "UNITY": "Unity Foods Limited",
     "UPFL": "Unilever Pakistan Foods Limited",
+    "JDWS": "JDW Sugar Mills Limited",
     
-    # Autos, Engineering & Industrial
+    # Autos, Engineering & Industrial (11)
     "ATLH": "Atlas Honda Limited",
-    "GAL": "Ghani Automobile Industries Limited",
+    "GAL": "Ghandhara Automobiles Limited",
+    "GHGL": "Ghani Glass Limited",
+    "INDU": "Indus Motor Company Limited",
     "INIL": "International Industries Limited",
     "ISL": "International Steels Limited",
+    "MTL": "Millat Tractors Limited",
     "PAEL": "Pak Elektron Limited",
     "SAZEW": "Sazgar Engineering Works Limited",
     "SRVI": "Service Industries Limited",
     "TGL": "Tariq Glass Industries Limited",
     "THALL": "Thal Limited",
     
-    # Textiles & Paper/Packaging
+    # Textiles & Paper/Packaging (10)
     "BNWM": "Bannu Woollen Mills Limited",
     "GADT": "Gadoon Textile Mills Limited",
     "GATM": "Gul Ahmed Textile Mills Limited",
@@ -119,16 +127,18 @@ KSE_100_DICT = {
     "NML": "Nishat Mills Limited",
     "PABC": "Pakistan Aluminium Beverage Cans Limited",
     "PKGS": "Packages Limited",
+    "IBFL": "Ibrahim Fibres Limited",
     
-    # Real Estate & REITs / Investment
+    # Real Estate, REITs, Services & Investment (9)
     "AHCL": "Arif Habib Corporation Limited",
     "AICL": "Adamjee Insurance Company Limited",
     "DCR": "Dolmen City REIT",
     "MHAM": "Murree Brewery Company Limited",
-    "MUREB": "Murree Brewery Company Limited",
     "PAKT": "Pakistan Tobacco Company Limited",
     "PIBTL": "Pakistan International Bulk Terminal Limited",
-    "TPLP": "TPL Properties Limited"
+    "PSX": "Pakistan Stock Exchange Limited",
+    "TPLP": "TPL Properties Limited",
+    "TPLRF1": "TPL REIT Fund I"
 }
 
 def chunk_list(lst, n):
@@ -139,7 +149,7 @@ def chunk_list(lst, n):
 @st.cache_data(ttl=45)
 def fetch_kse100_prices():
     """
-    Fetches prices for KSE-100 scrips with company names and sequential numbering.
+    Fetches prices for 100 KSE-100 scrips with company names and sequential numbering.
     """
     parsed_list = []
     symbols = list(KSE_100_DICT.keys())
