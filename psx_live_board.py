@@ -12,7 +12,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- Auto Refresh Setup (60 seconds) ---
+# --- Auto Refresh Setup (60 seconds = 1 minute) ---
 count = st_autorefresh(interval=60000, limit=None, key="psx_refresh_counter")
 
 st.title("📈 PSX KSE-100 Live Market Board")
@@ -34,7 +34,6 @@ def get_all_kse100_symbols():
         if res.status_code == 200:
             soup = BeautifulSoup(res.text, 'html.parser')
             symbols = []
-            # Scrape symbols from the PSX KSE100 constituents table
             table = soup.find("table")
             if table:
                 for row in table.find_all("tr")[1:]:
@@ -48,7 +47,7 @@ def get_all_kse100_symbols():
     except Exception:
         pass
     
-    # Fallback complete KSE-100 list if dynamic fetch encounters a block
+    # Complete KSE-100 backup list
     return [
         "ABL", "ABOT", "AGP", "AHCL", "AICL", "AIRLINK", "AKBL", "APL", "ATLH", "ATRL", 
         "BAFL", "BAHL", "BNWM", "BOP", "BWCL", "CHCC", "CNERGY", "COLG", "CPHL", "DCR", 
@@ -62,9 +61,9 @@ def get_all_kse100_symbols():
     ]
 
 @st.cache_data(ttl=45)
-def fetch_psx_stock_data(symbol):
+def fetch_psx_stock_price(symbol):
     """
-    Fetches real-time price and 52-week range details for a stock scrip.
+    Fetches latest traded stock price for a given scrip.
     """
     url = f"https://dps.psx.com.pk/company/{symbol}"
     
@@ -73,7 +72,6 @@ def fetch_psx_stock_data(symbol):
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
             
-            # 1. Latest Price
             latest_price = None
             price_elem = soup.find("div", class_="quote__close") or soup.find("div", class_="stats_value")
             if price_elem:
@@ -82,51 +80,30 @@ def fetch_psx_stock_data(symbol):
                     latest_price = float(raw_text)
                 except ValueError:
                     latest_price = None
-            
-            # 2. 52-Week High & Low
-            high_52, low_52 = None, None
-            for item in soup.find_all(["div", "tr"]):
-                text = item.text.lower()
-                if "52 week high" in text or "52w high" in text:
-                    val_elem = item.find("div", class_="stats_value") or item.find("td")
-                    if val_elem:
-                        try:
-                            high_52 = float(val_elem.text.strip().replace("Rs.", "").replace(",", ""))
-                        except ValueError:
-                            pass
-                elif "52 week low" in text or "52w low" in text:
-                    val_elem = item.find("div", class_="stats_value") or item.find("td")
-                    if val_elem:
-                        try:
-                            low_52 = float(val_elem.text.strip().replace("Rs.", "").replace(",", ""))
-                        except ValueError:
-                            pass
 
             return {
                 "Symbol": symbol,
-                "Latest Price (PKR)": latest_price if latest_price is not None else "N/A",
-                "52W High (PKR)": high_52 if high_52 is not None else "N/A",
-                "52W Low (PKR)": low_52 if low_52 is not None else "N/A"
+                "Latest Price (PKR)": latest_price if latest_price is not None else "N/A"
             }
     except Exception:
         pass
     
-    return {"Symbol": symbol, "Latest Price (PKR)": "N/A", "52W High (PKR)": "N/A", "52W Low (PKR)": "N/A"}
+    return {"Symbol": symbol, "Latest Price (PKR)": "N/A"}
 
 # --- Main App Execution ---
 all_symbols = get_all_kse100_symbols()
 
-with st.spinner(f"Fetching live data for {len(all_symbols)} KSE-100 companies..."):
-    data_list = [fetch_psx_stock_data(sym) for sym in all_symbols]
+with st.spinner(f"Fetching live prices for {len(all_symbols)} KSE-100 companies..."):
+    data_list = [fetch_psx_stock_price(sym) for sym in all_symbols]
     df = pd.DataFrame(data_list)
 
-# --- Metric Cards ---
+# --- Summary Metrics ---
 col1, col2, col3 = st.columns(3)
-col1.metric("Total Scrips Loaded", len(df))
+col1.metric("Total Scrips Tracked", len(df))
 col2.metric("Market Refresh Rate", "1 Minute Auto-Update")
 col3.metric("Refresh Cycle Count", f"#{count}")
 
-# --- Interactive Filter & Display ---
+# --- Search Filter & Table ---
 search_query = st.text_input("🔍 Search Company Symbol", "")
 if search_query:
     df = df[df["Symbol"].str.contains(search_query.upper(), na=False)]
@@ -138,7 +115,5 @@ st.dataframe(
     hide_index=True,
     column_config={
         "Latest Price (PKR)": st.column_config.NumberColumn(format="Rs. %.2f"),
-        "52W High (PKR)": st.column_config.NumberColumn(format="Rs. %.2f"),
-        "52W Low (PKR)": st.column_config.NumberColumn(format="Rs. %.2f"),
     }
 )
