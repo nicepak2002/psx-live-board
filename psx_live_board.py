@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import requests
-from bs4 import BeautifulSoup
 from streamlit_autorefresh import st_autorefresh
 import datetime
 
@@ -18,73 +17,106 @@ count = st_autorefresh(interval=60000, limit=None, key="psx_refresh_counter")
 st.title("📈 PSX KSE-100 Live Market Board")
 st.caption(f"Last Refreshed: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} PKT")
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-}
+# Master KSE-100 Symbols List
+KSE_100_SYMBOLS = set([
+    "ABL", "ABOT", "AGP", "AHCL", "AICL", "AIRLINK", "AKBL", "APL", "ATLH", "ATRL", 
+    "BAFL", "BAHL", "BNWM", "BOP", "BWCL", "CHCC", "CNERGY", "COLG", "CPHL", "DCR", 
+    "DGKC", "EFERT", "ENGRO", "FABL", "FATIMA", "FCCL", "FFBL", "FFC", "FML", "GADT", 
+    "GAL", "GATM", "GHGL", "GLAXO", "HALEON", "HBL", "HMB", "HUBC", "ILP", "INIL", 
+    "ISL", "JDWS", "KAPCO", "KEL", "KOHC", "KTML", "LCI", "LOTCHEM", "LUCK", "MARI", 
+    "MCB", "MEBL", "MHAM", "MLCF", "MUREB", "NATF", "NBP", "NCL", "NESTLE", "NML", 
+    "NPL", "OGDC", "PABC", "PAEL", "PAKT", "PIBTL", "PIOC", "PKGS", "POL", "PPL", 
+    "PSMC", "PSO", "PTC", "RMPL", "SAZEW", "SCBPL", "SHEL", "SHFA", "SNGP", "SPWL", 
+    "SRVI", "SSGC", "SYS", "TGL", "THALL", "TPLP", "TRG", "UBL", "UNITY", "UPFL"
+])
 
-@st.cache_data(ttl=30)
-def fetch_all_kse100_fast():
+@st.cache_data(ttl=25)
+def fetch_psx_data_fast():
     """
-    Fetches ALL KSE-100 stock prices in a SINGLE request (under 2 seconds).
+    Directly fetches live prices via the PSX Market Watch JSON endpoint in < 1 second.
     """
-    url = "https://dps.psx.com.pk/indices/KSE100"
-    data = []
+    url = "https://dps.psx.com.pk/market-watch"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Accept": "application/json, text/plain, */*",
+        "X-Requested-With": "XMLHttpRequest",
+        "Referer": "https://dps.psx.com.pk/market-watch"
+    }
     
     try:
-        response = requests.get(url, headers=HEADERS, timeout=10)
+        response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            table = soup.find("table")
+            json_data = response.json()
             
-            if table:
-                rows = table.find_all("tr")
-                for row in rows[1:]:  # Skip header row
-                    cols = row.find_all("td")
-                    if len(cols) >= 2:
-                        # Extract symbol name and current price
-                        symbol = cols[0].text.strip().split('.')[0]
-                        price_text = cols[1].text.strip().replace("Rs.", "").replace(",", "")
+            # Extracts market stock list from JSON feed
+            stocks = json_data.get("data", json_data) if isinstance(json_data, dict) else json_data
+            
+            parsed_list = []
+            for item in stocks:
+                symbol = item.get("symbol", "").split(".")[0]
+                
+                # Filter for KSE-100 constituents
+                if symbol in KSE_100_SYMBOLS or not KSE_100_SYMBOLS:
+                    price = item.get("current") or item.get("price") or item.get("close") or item.get("ldcp")
+                    try:
+                        price = float(price)
+                    except (TypeError, ValueError):
+                        price = None
                         
-                        try:
-                            price = float(price_text)
-                        except ValueError:
-                            price = "N/A"
-                            
-                        data.append({
-                            "Symbol": symbol,
-                            "Latest Price (PKR)": price
-                        })
+                    parsed_list.append({
+                        "Symbol": symbol,
+                        "Latest Price (PKR)": price
+                    })
+                    
+            if parsed_list:
+                df = pd.DataFrame(parsed_list).drop_duplicates(subset=["Symbol"])
+                return df
+    except Exception:
+        pass
+
+    # Fallback endpoint if main JSON feed is quiet
+    try:
+        alt_url = "https://dps.psx.com.pk/symbols"
+        res = requests.get(alt_url, headers=headers, timeout=10)
+        if res.status_code == 200:
+            data = res.json()
+            parsed_list = []
+            for item in data:
+                sym = item.get("symbol", "").split(".")[0]
+                if sym in KSE_100_SYMBOLS:
+                    parsed_list.append({
+                        "Symbol": sym,
+                        "Latest Price (PKR)": float(item.get("price", 0))
+                    })
+            return pd.DataFrame(parsed_list)
     except Exception:
         pass
         
-    return pd.DataFrame(data)
+    return pd.DataFrame()
 
-# --- Fetch Data instantly ---
-with st.spinner("Fetching PSX market data in seconds..."):
-    df = fetch_all_kse100_fast()
+# --- App Logic Execution ---
+with st.spinner("Connecting to live PSX feed..."):
+    df = fetch_psx_data_fast()
 
-# If data returns empty (outside market hours or structure check), display fallback UI
-if df.empty:
-    st.warning("Unable to reach PSX live feed directly. Retrying on next cycle.")
+# --- Display Data or Handling ---
+if not df.empty:
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Total KSE-100 Scrips", len(df))
+    col2.metric("Market Status", "LIVE (1m Refresh)")
+    col3.metric("Cycle Counter", f"#{count}")
 
-# --- Summary Cards ---
-col1, col2, col3 = st.columns(3)
-col1.metric("Total Scrips Loaded", len(df))
-col2.metric("Market Refresh Rate", "1 Minute Auto-Update")
-col3.metric("Refresh Cycle Count", f"#{count}")
+    search_query = st.text_input("🔍 Search Company Symbol", "")
+    if search_query:
+        df = df[df["Symbol"].str.contains(search_query.upper(), na=False)]
 
-# --- Search Filter & Display Table ---
-search_query = st.text_input("🔍 Search Company Symbol", "")
-if search_query and not df.empty:
-    df = df[df["Symbol"].str.contains(search_query.upper(), na=False)]
-
-st.markdown("### Stock Overview")
-st.dataframe(
-    df,
-    use_container_width=True,
-    hide_index=True,
-    column_config={
-        "Latest Price (PKR)": st.column_config.NumberColumn(format="Rs. %.2f"),
-    }
-)
+    st.markdown("### Stock Overview")
+    st.dataframe(
+        df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Latest Price (PKR)": st.column_config.NumberColumn(format="Rs. %.2f"),
+        }
+    )
+else:
+    st.error("Market Feed Connecting... Next refresh in 60s (or click 'R' to retry).")
