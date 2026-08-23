@@ -13,23 +13,23 @@ st.set_page_config(
 )
 
 # --- Auto Refresh Setup ---
-# 15000 milliseconds = 15 seconds
-count = st_autorefresh(interval=15000, limit=None, key="psx_refresh_counter")
+# 60000 milliseconds = 1 minute
+count = st_autorefresh(interval=60000, limit=None, key="psx_refresh_counter")
 
 st.title("📈 PSX KSE-100 Live Market Board")
-st.caption(f"Last Refreshed: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} PST")
+st.caption(f"Last Refreshed: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} PKT")
 
-# Sample list of major KSE-100 scrips (Add remaining symbols to complete your 100 list)
+# KSE-100 Scrips List
 KSE_100_SYMBOLS = [
     "LUCK", "ENGRO", "HUBC", "OGDC", "PPL", "SYS", "MEBL", "FFC", 
     "HBL", "MCB", "UBL", "MARI", "EFERT", "TRG", "POL", "BAFL", 
     "CHCC", "DGKC", "PIOC", "CNERGY", "BOP", "KEL", "TPLP", "DOL"
 ]
 
-@st.cache_data(ttl=12)  # Cache results for 12 seconds to prevent redundant network hits
+@st.cache_data(ttl=50)  # Cache results for 50 seconds to keep performance smooth
 def fetch_psx_stock_data(symbol):
     """
-    Fetches real-time stock details from PSX Data Portal.
+    Fetches stock details from the official PSX Data Portal.
     """
     url = f"https://dps.psx.com.pk/company/{symbol}"
     headers = {
@@ -45,7 +45,7 @@ def fetch_psx_stock_data(symbol):
             price_elem = soup.find("div", class_="quote__close")
             latest_price = price_elem.text.strip().replace("Rs.", "").replace(",", "") if price_elem else "N/A"
             
-            # Extract 52-Week High & Low from stats grid
+            # Extract 52-Week High & Low
             stats_keys = soup.find_all("div", class_="stats_label")
             stats_values = soup.find_all("div", class_="stats_value")
             
@@ -70,21 +70,21 @@ def fetch_psx_stock_data(symbol):
     
     return {"Symbol": symbol, "Latest Price (PKR)": "N/A", "52W High (PKR)": "N/A", "52W Low (PKR)": "N/A"}
 
-# --- Data Fetching Execution ---
-with st.spinner("Fetching live PSX data..."):
+# --- Data Fetching ---
+with st.spinner("Fetching PSX market data..."):
     data_list = []
     for sym in KSE_100_SYMBOLS:
         data_list.append(fetch_psx_stock_data(sym))
         
     df = pd.DataFrame(data_list)
 
-# --- Metric Cards Summary ---
+# --- Summary Cards ---
 col1, col2, col3 = st.columns(3)
 col1.metric("Total Scrips Tracked", len(df))
-col2.metric("Market Status", "LIVE (15s Refresh)" if datetime.datetime.now().hour in range(9, 16) else "CLOSED (Showing Last Price)")
-col3.metric("Auto-Refresh Cycle", f"#{count}")
+col2.metric("Market Refresh Rate", "1 Minute Auto-Update")
+col3.metric("Refresh Cycle Count", f"#{count}")
 
-# --- Render Interactive Table ---
+# --- Display Data Table ---
 st.markdown("### Stock Overview")
 st.dataframe(
     df,
