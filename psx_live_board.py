@@ -3,6 +3,8 @@ import pandas as pd
 import yfinance as yf
 from streamlit_autorefresh import st_autorefresh
 import datetime
+import requests
+from bs4 import BeautifulSoup
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -17,9 +19,9 @@ count = st_autorefresh(interval=60000, limit=None, key="psx_refresh_counter")
 st.title("📈 PSX KSE-100 Market Board")
 st.caption(f"Last Updated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} PKT")
 
-# Official KSE-100 Index Constituents (100 Companies Mapping)
+# Official KSE-100 Index Constituents (Corrected Ticker Mappings)
 KSE_100_DICT = {
-    # Banks & Financials (13)
+    # Banks & Financials
     "ABL": "Allied Bank Limited",
     "AKBL": "Askari Bank Limited",
     "BAFL": "Bank Alfalah Limited",
@@ -34,7 +36,7 @@ KSE_100_DICT = {
     "SCBPL": "Standard Chartered Bank (Pakistan) Limited",
     "UBL": "United Bank Limited",
     
-    # Oil & Gas / Exploration / Marketing (11)
+    # Oil & Gas / Exploration / Marketing
     "APL": "Attock Petroleum Limited",
     "ATRL": "Attock Refinery Limited",
     "CNERGY": "Cnergyico PK Limited",
@@ -47,7 +49,7 @@ KSE_100_DICT = {
     "SNGP": "Sui Northern Gas Pipelines Limited",
     "SSGC": "Sui Southern Gas Company Limited",
     
-    # Chemicals, Fertilizers & Petrochemicals (11)
+    # Chemicals, Fertilizers & Petrochemicals
     "AGP": "AGP Limited",
     "COLG": "Colgate-Palmolive (Pakistan) Limited",
     "CPHL": "Citi Pharma Limited",
@@ -60,7 +62,7 @@ KSE_100_DICT = {
     "ICI": "Lucky Core Industries Limited",
     "LOTCHEM": "Lotte Chemical Pakistan Limited",
     
-    # Cement & Building Materials (9)
+    # Cement & Building Materials
     "BWCL": "Bestway Cement Limited",
     "CHCC": "Cherat Cement Company Limited",
     "DGKC": "D.G. Khan Cement Company Limited",
@@ -71,7 +73,7 @@ KSE_100_DICT = {
     "PIOC": "Pioneer Cement Limited",
     "POWER": "Power Cement Limited",
     
-    # Technology & Telecom (7)
+    # Technology & Telecom
     "AIRLINK": "Air Link Communication Limited",
     "AVN": "Avanceon Limited",
     "OCTOPUS": "Octopus Digital Limited",
@@ -80,14 +82,14 @@ KSE_100_DICT = {
     "TELE": "Telecard Limited",
     "TRG": "TRG Pakistan Limited",
     
-    # Power & Energy (5)
+    # Power & Energy
     "HUBC": "The Hub Power Company Limited",
     "KAPCO": "Kot Addu Power Company Limited",
     "KEL": "K-Electric Limited",
     "NPL": "Nishat Power Limited",
     "SPWL": "Saif Power Limited",
     
-    # Food, Personal Care & Pharmaceuticals (14)
+    # Food, Personal Care & Pharmaceuticals
     "ABOT": "Abbott Laboratories (Pakistan) Limited",
     "FFL": "Fauji Foods Limited",
     "FML": "FrieslandCampina Engro Pakistan Limited",
@@ -103,7 +105,7 @@ KSE_100_DICT = {
     "UPFL": "Unilever Pakistan Foods Limited",
     "JDWS": "JDW Sugar Mills Limited",
     
-    # Autos, Engineering & Industrial (11)
+    # Autos, Engineering & Industrial
     "ATLH": "Atlas Honda Limited",
     "GAL": "Ghandhara Automobiles Limited",
     "GHGL": "Ghani Glass Limited",
@@ -117,7 +119,7 @@ KSE_100_DICT = {
     "TGL": "Tariq Glass Industries Limited",
     "THALL": "Thal Limited",
     
-    # Textiles & Paper/Packaging (10)
+    # Textiles & Paper/Packaging
     "BNWM": "Bannu Woollen Mills Limited",
     "GADT": "Gadoon Textile Mills Limited",
     "GATM": "Gul Ahmed Textile Mills Limited",
@@ -129,7 +131,7 @@ KSE_100_DICT = {
     "PKGS": "Packages Limited",
     "IBFL": "Ibrahim Fibres Limited",
     
-    # Real Estate, REITs, Services & Investment (9)
+    # Real Estate, REITs, Services & Investment
     "AHCL": "Arif Habib Corporation Limited",
     "AICL": "Adamjee Insurance Company Limited",
     "DCR": "Dolmen City REIT",
@@ -146,10 +148,26 @@ def chunk_list(lst, n):
     for i in range(0, len(lst), n):
         yield lst[i:i + n]
 
+def fetch_single_psx_fallback(symbol):
+    """Fallback fetch for scrips missing on Yahoo Finance."""
+    url = f"https://dps.psx.com.pk/company/{symbol}"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    try:
+        res = requests.get(url, headers=headers, timeout=4)
+        if res.status_code == 200:
+            soup = BeautifulSoup(res.text, 'html.parser')
+            elem = soup.find("div", class_="quote__close")
+            if elem:
+                val = float(elem.text.strip().replace("Rs.", "").replace(",", ""))
+                return val
+    except Exception:
+        pass
+    return None
+
 @st.cache_data(ttl=45)
 def fetch_kse100_prices():
     """
-    Fetches prices for 100 KSE-100 scrips with company names and sequential numbering.
+    Fetches prices for all 100 KSE-100 scrips with fallback for missing Yahoo feeds.
     """
     parsed_list = []
     symbols = list(KSE_100_DICT.keys())
@@ -175,12 +193,22 @@ def fetch_kse100_prices():
                             "Status": "Active"
                         })
                     else:
-                        parsed_list.append({
-                            "Company Name": KSE_100_DICT.get(sym, sym),
-                            "Symbol": sym,
-                            "Price (PKR)": "N/A",
-                            "Status": "No Data"
-                        })
+                        # Attempt fallback for missing ticker
+                        fallback_price = fetch_single_psx_fallback(sym)
+                        if fallback_price:
+                            parsed_list.append({
+                                "Company Name": KSE_100_DICT.get(sym, sym),
+                                "Symbol": sym,
+                                "Price (PKR)": round(fallback_price, 2),
+                                "Status": "Active (Fallback)"
+                            })
+                        else:
+                            parsed_list.append({
+                                "Company Name": KSE_100_DICT.get(sym, sym),
+                                "Symbol": sym,
+                                "Price (PKR)": "N/A",
+                                "Status": "Inactive / Suspended"
+                            })
         except Exception:
             for sym in chunk:
                 parsed_list.append({
@@ -192,7 +220,6 @@ def fetch_kse100_prices():
 
     df = pd.DataFrame(parsed_list)
     
-    # Insert S.No as the first column starting from 1
     if not df.empty:
         df.insert(0, "S.No", range(1, len(df) + 1))
         
@@ -203,11 +230,11 @@ with st.spinner("Retrieving KSE-100 Index constituents data..."):
     df = fetch_kse100_prices()
 
 if not df.empty:
-    valid_df = df[df["Status"] == "Active"]
+    valid_df = df[df["Price (PKR)"] != "N/A"]
     
     col1, col2, col3 = st.columns(3)
     col1.metric("KSE-100 Constituents", len(df))
-    col2.metric("Active Feeds", len(valid_df))
+    col2.metric("Active Price Feeds", f"{len(valid_df)} / {len(df)}")
     col3.metric("Auto-Refresh Cycle", f"#{count}")
 
     search_query = st.text_input("🔍 Filter by Company Name or Symbol", "")
@@ -227,6 +254,7 @@ if not df.empty:
             "Company Name": st.column_config.TextColumn("Company Name"),
             "Symbol": st.column_config.TextColumn("Symbol"),
             "Price (PKR)": st.column_config.NumberColumn(format="Rs. %.2f"),
+            "Status": st.column_config.TextColumn("Status")
         }
     )
 else:
