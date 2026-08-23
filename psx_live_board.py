@@ -23,89 +23,60 @@ HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 }
 
-@st.cache_data(ttl=300)
-def get_all_kse100_symbols():
+@st.cache_data(ttl=30)
+def fetch_all_kse100_fast():
     """
-    Dynamically fetches all constituent scrips in the KSE-100 index directly from PSX DPS.
+    Fetches ALL KSE-100 stock prices in a SINGLE request (under 2 seconds).
     """
     url = "https://dps.psx.com.pk/indices/KSE100"
-    try:
-        res = requests.get(url, headers=HEADERS, timeout=10)
-        if res.status_code == 200:
-            soup = BeautifulSoup(res.text, 'html.parser')
-            symbols = []
-            table = soup.find("table")
-            if table:
-                for row in table.find_all("tr")[1:]:
-                    cols = row.find_all("td")
-                    if cols:
-                        sym = cols[0].text.strip().split('.')[0]  # Strip any .XD suffix
-                        if sym and sym not in symbols:
-                            symbols.append(sym)
-            if len(symbols) >= 50:
-                return symbols
-    except Exception:
-        pass
-    
-    # Complete KSE-100 backup list
-    return [
-        "ABL", "ABOT", "AGP", "AHCL", "AICL", "AIRLINK", "AKBL", "APL", "ATLH", "ATRL", 
-        "BAFL", "BAHL", "BNWM", "BOP", "BWCL", "CHCC", "CNERGY", "COLG", "CPHL", "DCR", 
-        "DGKC", "EFERT", "ENGRO", "FABL", "FATIMA", "FCCL", "FFBL", "FFC", "FML", "GADT", 
-        "GAL", "GATM", "GHGL", "GLAXO", "HALEON", "HBL", "HMB", "HUBC", "ILP", "INIL", 
-        "ISL", "JDWS", "KAPCO", "KEL", "KOHC", "KTML", "LCI", "LOTCHEM", "LUCK", "MARI", 
-        "MCB", "MEBL", "MHAM", "MLCF", "MUREB", "NATF", "NBP", "NCL", "NESTLE", "NML", 
-        "NPL", "OGDC", "PABC", "PAEL", "PAKT", "PIBTL", "PIOC", "PKGS", "POL", "PPL", 
-        "PSMC", "PSO", "PTC", "RMPL", "SAZEW", "SCBPL", "SHEL", "SHFA", "SNGP", "SPWL", 
-        "SRVI", "SSGC", "SYS", "TGL", "THALL", "TPLP", "TRG", "UBL", "UNITY", "UPFL"
-    ]
-
-@st.cache_data(ttl=45)
-def fetch_psx_stock_price(symbol):
-    """
-    Fetches latest traded stock price for a given scrip.
-    """
-    url = f"https://dps.psx.com.pk/company/{symbol}"
+    data = []
     
     try:
-        response = requests.get(url, headers=HEADERS, timeout=8)
+        response = requests.get(url, headers=HEADERS, timeout=10)
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
+            table = soup.find("table")
             
-            latest_price = None
-            price_elem = soup.find("div", class_="quote__close") or soup.find("div", class_="stats_value")
-            if price_elem:
-                raw_text = price_elem.text.strip().replace("Rs.", "").replace(",", "").strip()
-                try:
-                    latest_price = float(raw_text)
-                except ValueError:
-                    latest_price = None
-
-            return {
-                "Symbol": symbol,
-                "Latest Price (PKR)": latest_price if latest_price is not None else "N/A"
-            }
+            if table:
+                rows = table.find_all("tr")
+                for row in rows[1:]:  # Skip header row
+                    cols = row.find_all("td")
+                    if len(cols) >= 2:
+                        # Extract symbol name and current price
+                        symbol = cols[0].text.strip().split('.')[0]
+                        price_text = cols[1].text.strip().replace("Rs.", "").replace(",", "")
+                        
+                        try:
+                            price = float(price_text)
+                        except ValueError:
+                            price = "N/A"
+                            
+                        data.append({
+                            "Symbol": symbol,
+                            "Latest Price (PKR)": price
+                        })
     except Exception:
         pass
-    
-    return {"Symbol": symbol, "Latest Price (PKR)": "N/A"}
+        
+    return pd.DataFrame(data)
 
-# --- Main App Execution ---
-all_symbols = get_all_kse100_symbols()
+# --- Fetch Data instantly ---
+with st.spinner("Fetching PSX market data in seconds..."):
+    df = fetch_all_kse100_fast()
 
-with st.spinner(f"Fetching live prices for {len(all_symbols)} KSE-100 companies..."):
-    data_list = [fetch_psx_stock_price(sym) for sym in all_symbols]
-    df = pd.DataFrame(data_list)
+# If data returns empty (outside market hours or structure check), display fallback UI
+if df.empty:
+    st.warning("Unable to reach PSX live feed directly. Retrying on next cycle.")
 
-# --- Summary Metrics ---
+# --- Summary Cards ---
 col1, col2, col3 = st.columns(3)
-col1.metric("Total Scrips Tracked", len(df))
+col1.metric("Total Scrips Loaded", len(df))
 col2.metric("Market Refresh Rate", "1 Minute Auto-Update")
 col3.metric("Refresh Cycle Count", f"#{count}")
 
-# --- Search Filter & Table ---
+# --- Search Filter & Display Table ---
 search_query = st.text_input("🔍 Search Company Symbol", "")
-if search_query:
+if search_query and not df.empty:
     df = df[df["Symbol"].str.contains(search_query.upper(), na=False)]
 
 st.markdown("### Stock Overview")
