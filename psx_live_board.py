@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import requests
+import yfinance as yf
 from streamlit_autorefresh import st_autorefresh
 import datetime
 
@@ -11,99 +11,70 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- Auto Refresh Setup (60 seconds = 1 minute) ---
+# --- Auto Refresh Setup (60 seconds) ---
 count = st_autorefresh(interval=60000, limit=None, key="psx_refresh_counter")
 
 st.title("📈 PSX KSE-100 Live Market Board")
 st.caption(f"Last Refreshed: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} PKT")
 
-# Master KSE-100 Symbols List
-KSE_100_SYMBOLS = set([
-    "ABL", "ABOT", "AGP", "AHCL", "AICL", "AIRLINK", "AKBL", "APL", "ATLH", "ATRL", 
-    "BAFL", "BAHL", "BNWM", "BOP", "BWCL", "CHCC", "CNERGY", "COLG", "CPHL", "DCR", 
-    "DGKC", "EFERT", "ENGRO", "FABL", "FATIMA", "FCCL", "FFBL", "FFC", "FML", "GADT", 
-    "GAL", "GATM", "GHGL", "GLAXO", "HALEON", "HBL", "HMB", "HUBC", "ILP", "INIL", 
-    "ISL", "JDWS", "KAPCO", "KEL", "KOHC", "KTML", "LCI", "LOTCHEM", "LUCK", "MARI", 
-    "MCB", "MEBL", "MHAM", "MLCF", "MUREB", "NATF", "NBP", "NCL", "NESTLE", "NML", 
-    "NPL", "OGDC", "PABC", "PAEL", "PAKT", "PIBTL", "PIOC", "PKGS", "POL", "PPL", 
-    "PSMC", "PSO", "PTC", "RMPL", "SAZEW", "SCBPL", "SHEL", "SHFA", "SNGP", "SPWL", 
-    "SRVI", "SSGC", "SYS", "TGL", "THALL", "TPLP", "TRG", "UBL", "UNITY", "UPFL"
-])
+# KSE-100 Ticker Symbols mapped to Yahoo Finance PSX format (.KA)
+KSE_100_SYMBOLS = [
+    "LUCK", "ENGRO", "HUBC", "OGDC", "PPL", "SYS", "MEBL", "FFC", 
+    "HBL", "MCB", "UBL", "MARI", "EFERT", "TRG", "POL", "BAFL", 
+    "CHCC", "DGKC", "PIOC", "CNERGY", "BOP", "KEL", "TPLP", "DOL",
+    "ABL", "ABOT", "AGP", "AHCL", "AICL", "AIRLINK", "AKBL", "APL",
+    "ATLH", "ATRL", "BAHL", "BWCL", "COLG", "CPHL", "DGKC", "FABL",
+    "FATIMA", "FCCL", "FFBL", "GADT", "GAL", "GATM", "GLAXO", "HALEON",
+    "HMB", "ILP", "INIL", "ISL", "KAPCO", "KOHC", "KTML", "LCI",
+    "LOTCHEM", "MLCF", "NBP", "NCL", "NESTLE", "NML", "NPL", "PABC",
+    "PAEL", "PAKT", "PIBTL", "PKGS", "PSO", "PTC", "RMPL", "SAZEW",
+    "SHEL", "SHFA", "SNGP", "SPWL", "SRVI", "SSGC", "TGL", "THALL", "UNITY"
+]
 
-@st.cache_data(ttl=25)
-def fetch_psx_data_fast():
+@st.cache_data(ttl=45)
+def fetch_psx_via_yfinance():
     """
-    Directly fetches live prices via the PSX Market Watch JSON endpoint in < 1 second.
+    Downloads bulk market data for all PSX stocks in a single request.
     """
-    url = "https://dps.psx.com.pk/market-watch"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "Accept": "application/json, text/plain, */*",
-        "X-Requested-With": "XMLHttpRequest",
-        "Referer": "https://dps.psx.com.pk/market-watch"
-    }
+    # Convert symbols to Yahoo Finance format (e.g., LUCK.KA)
+    yf_tickers = [f"{sym}.KA" for sym in KSE_100_SYMBOLS]
     
     try:
-        response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code == 200:
-            json_data = response.json()
+        # Bulk download 1-day data for fast execution
+        data = yf.download(yf_tickers, period="1d", interval="1m", progress=False)
+        
+        parsed_list = []
+        if not data.empty and 'Close' in data:
+            close_prices = data['Close'].iloc[-1]  # Get the latest closing/live price row
             
-            # Extracts market stock list from JSON feed
-            stocks = json_data.get("data", json_data) if isinstance(json_data, dict) else json_data
-            
-            parsed_list = []
-            for item in stocks:
-                symbol = item.get("symbol", "").split(".")[0]
+            for sym in KSE_100_SYMBOLS:
+                ticker_key = f"{sym}.KA"
+                price = close_prices.get(ticker_key, None)
                 
-                # Filter for KSE-100 constituents
-                if symbol in KSE_100_SYMBOLS or not KSE_100_SYMBOLS:
-                    price = item.get("current") or item.get("price") or item.get("close") or item.get("ldcp")
-                    try:
-                        price = float(price)
-                    except (TypeError, ValueError):
-                        price = None
-                        
-                    parsed_list.append({
-                        "Symbol": symbol,
-                        "Latest Price (PKR)": price
-                    })
-                    
-            if parsed_list:
-                df = pd.DataFrame(parsed_list).drop_duplicates(subset=["Symbol"])
-                return df
-    except Exception:
-        pass
-
-    # Fallback endpoint if main JSON feed is quiet
-    try:
-        alt_url = "https://dps.psx.com.pk/symbols"
-        res = requests.get(alt_url, headers=headers, timeout=10)
-        if res.status_code == 200:
-            data = res.json()
-            parsed_list = []
-            for item in data:
-                sym = item.get("symbol", "").split(".")[0]
-                if sym in KSE_100_SYMBOLS:
+                # Fallback check if single value or nan
+                if pd.notna(price):
                     parsed_list.append({
                         "Symbol": sym,
-                        "Latest Price (PKR)": float(item.get("price", 0))
+                        "Latest Price (PKR)": round(float(price), 2)
                     })
+                else:
+                    parsed_list.append({"Symbol": sym, "Latest Price (PKR)": "N/A"})
+                    
             return pd.DataFrame(parsed_list)
     except Exception:
         pass
         
     return pd.DataFrame()
 
-# --- App Logic Execution ---
-with st.spinner("Connecting to live PSX feed..."):
-    df = fetch_psx_data_fast()
+# --- Application Logic ---
+with st.spinner("Fetching live PSX prices..."):
+    df = fetch_psx_via_yfinance()
 
-# --- Display Data or Handling ---
 if not df.empty:
     col1, col2, col3 = st.columns(3)
-    col1.metric("Total KSE-100 Scrips", len(df))
-    col2.metric("Market Status", "LIVE (1m Refresh)")
-    col3.metric("Cycle Counter", f"#{count}")
+    col1.metric("Total Scrips Tracked", len(df))
+    col2.metric("Market Refresh Rate", "1 Minute Auto-Update")
+    col3.metric("Cycle Count", f"#{count}")
 
     search_query = st.text_input("🔍 Search Company Symbol", "")
     if search_query:
@@ -119,4 +90,4 @@ if not df.empty:
         }
     )
 else:
-    st.error("Market Feed Connecting... Next refresh in 60s (or click 'R' to retry).")
+    st.error("Connecting to server... If market is closed, data will reflect last traded price on next refresh.")
