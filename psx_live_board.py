@@ -17,29 +17,119 @@ count = st_autorefresh(interval=60000, limit=None, key="psx_refresh_counter")
 st.title("📈 PSX KSE-100 Market Board")
 st.caption(f"Last Updated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} PKT")
 
-# Official KSE-100 Index Constituents Ticker Symbols
-KSE_100_CONSTITUENTS = [
+# Official KSE-100 Index Constituents (Symbol to Full Company Name Mapping)
+KSE_100_DICT = {
     # Banks & Financials
-    "ABL", "AKBL", "BAFL", "BAHL", "BOP", "FABL", "HBL", "HMB", "MCB", "MEBL", "NBP", "SCBPL", "UBL",
+    "ABL": "Allied Bank Limited",
+    "AKBL": "Askari Bank Limited",
+    "BAFL": "Bank Alfalah Limited",
+    "BAHL": "Bank AL Habib Limited",
+    "BOP": "The Bank of Punjab",
+    "FABL": "Faysal Bank Limited",
+    "HBL": "Habib Bank Limited",
+    "HMB": "Habib Metropolitan Bank Limited",
+    "MCB": "MCB Bank Limited",
+    "MEBL": "Meezan Bank Limited",
+    "NBP": "National Bank of Pakistan",
+    "SCBPL": "Standard Chartered Bank (Pakistan) Limited",
+    "UBL": "United Bank Limited",
+    
     # Oil & Gas / Exploration / Marketing
-    "APL", "ATRL", "CNERGY", "MARI", "OGDC", "POL", "PPL", "PSO", "SHEL", "SNGP", "SSGC",
+    "APL": "Attock Petroleum Limited",
+    "ATRL": "Attock Refinery Limited",
+    "CNERGY": "Cnergyico PK Limited",
+    "MARI": "Mari Petroleum Company Limited",
+    "OGDC": "Oil & Gas Development Company Limited",
+    "POL": "Pakistan Oilfields Limited",
+    "PPL": "Pakistan Petroleum Limited",
+    "PSO": "Pakistan State Oil Company Limited",
+    "SHEL": "Shell Pakistan Limited",
+    "SNGP": "Sui Northern Gas Pipelines Limited",
+    "SSGC": "Sui Southern Gas Company Limited",
+    
     # Chemicals, Fertilizers & Petrochemicals
-    "AGP", "COLG", "CPHL", "EFERT", "ENGRO", "EPCL", "FATIMA", "FFBL", "FFC", "ICI", "LOTCHEM",
-    # Cement & Materials
-    "BWCL", "CHCC", "DGKC", "FCCL", "KOHC", "LUCK", "MLCF", "PIOC",
+    "AGP": "AGP Limited",
+    "COLG": "Colgate-Palmolive (Pakistan) Limited",
+    "CPHL": "Citi Pharma Limited",
+    "EFERT": "Engro Fertilizers Limited",
+    "ENGRO": "Engro Corporation Limited",
+    "EPCL": "Engro Polymer & Chemicals Limited",
+    "FATIMA": "Fatima Fertilizer Company Limited",
+    "FFBL": "Fauji Fertilizer Bin Qasim Limited",
+    "FFC": "Fauji Fertilizer Company Limited",
+    "ICI": "Lucky Core Industries Limited",
+    "LOTCHEM": "Lotte Chemical Pakistan Limited",
+    
+    # Cement & Building Materials
+    "BWCL": "Bestway Cement Limited",
+    "CHCC": "Cherat Cement Company Limited",
+    "DGKC": "D.G. Khan Cement Company Limited",
+    "FCCL": "Fauji Cement Company Limited",
+    "KOHC": "Kohat Cement Company Limited",
+    "LUCK": "Lucky Cement Limited",
+    "MLCF": "Maple Leaf Cement Factory Limited",
+    "PIOC": "Pioneer Cement Limited",
+    
     # Technology & Telecom
-    "AIRLINK", "AVN", "OCTOPUS", "PTC", "SYS", "TELE", "TRG",
+    "AIRLINK": "Air Link Communication Limited",
+    "AVN": "Avanceon Limited",
+    "OCTOPUS": "Octopus Digital Limited",
+    "PTC": "Pakistan Telecommunication Company Limited",
+    "SYS": "Systems Limited",
+    "TELE": "Telecard Limited",
+    "TRG": "TRG Pakistan Limited",
+    
     # Power & Energy
-    "HUBC", "KAPCO", "KEL", "NPL", "SPWL",
+    "HUBC": "The Hub Power Company Limited",
+    "KAPCO": "Kot Addu Power Company Limited",
+    "KEL": "K-Electric Limited",
+    "NPL": "Nishat Power Limited",
+    "SPWL": "Saif Power Limited",
+    
     # Food, Personal Care & Pharma
-    "ABOT", "FML", "GLAXO", "HALEON", "NATF", "NESTLE", "RMPL", "SHFA", "UNITY", "UPFL",
-    # Autos & Engineering / Industrial
-    "ATLH", "GAL", "INIL", "ISL", "PAEL", "SAZEW", "SRVI", "TGL", "THALL",
+    "ABOT": "Abbott Laboratories (Pakistan) Limited",
+    "FML": "FrieslandCampina Engro Pakistan Limited",
+    "GLAXO": "GlaxoSmithKline Pakistan Limited",
+    "HALEON": "Haleon Pakistan Limited",
+    "NATF": "National Foods Limited",
+    "NESTLE": "Nestlé Pakistan Limited",
+    "RMPL": "Rafhan Maize Products Company Limited",
+    "SHFA": "Shifa International Hospitals Limited",
+    "UNITY": "Unity Foods Limited",
+    "UPFL": "Unilever Pakistan Foods Limited",
+    
+    # Autos, Engineering & Industrial
+    "ATLH": "Atlas Honda Limited",
+    "GAL": "Ghani Automobile Industries Limited",
+    "INIL": "International Industries Limited",
+    "ISL": "International Steels Limited",
+    "PAEL": "Pak Elektron Limited",
+    "SAZEW": "Sazgar Engineering Works Limited",
+    "SRVI": "Service Industries Limited",
+    "TGL": "Tariq Glass Industries Limited",
+    "THALL": "Thal Limited",
+    
     # Textiles & Paper/Packaging
-    "BNWM", "GADT", "GATM", "ILP", "KTML", "NCL", "NML", "PABC", "PKGS",
+    "BNWM": "Bannu Woollen Mills Limited",
+    "GADT": "Gadoon Textile Mills Limited",
+    "GATM": "Gul Ahmed Textile Mills Limited",
+    "ILP": "Interloop Limited",
+    "KTML": "Kohinoor Textile Mills Limited",
+    "NCL": "Nishat Chunian Limited",
+    "NML": "Nishat Mills Limited",
+    "PABC": "Pakistan Aluminium Beverage Cans Limited",
+    "PKGS": "Packages Limited",
+    
     # Real Estate & REITs / Investment
-    "AHCL", "AICL", "DCR", "MHAM", "MUREB", "PAKT", "PIBTL", "TPLP"
-]
+    "AHCL": "Arif Habib Corporation Limited",
+    "AICL": "Adamjee Insurance Company Limited",
+    "DCR": "Dolmen City REIT",
+    "MHAM": "Murree Brewery Company Limited",
+    "MUREB": "Murree Brewery Company Limited",
+    "PAKT": "Pakistan Tobacco Company Limited",
+    "PIBTL": "Pakistan International Bulk Terminal Limited",
+    "TPLP": "TPL Properties Limited"
+}
 
 def chunk_list(lst, n):
     """Yield successive n-sized chunks from lst."""
@@ -49,11 +139,11 @@ def chunk_list(lst, n):
 @st.cache_data(ttl=45)
 def fetch_kse100_prices():
     """
-    Fetches latest traded prices exclusively for official KSE-100 index scrips.
+    Fetches prices for KSE-100 scrips with company names and sequential numbering.
     """
     parsed_list = []
-    # Fetch in small batches of 25 to guarantee 100% Yahoo API coverage
-    symbol_chunks = list(chunk_list(KSE_100_CONSTITUENTS, 25))
+    symbols = list(KSE_100_DICT.keys())
+    symbol_chunks = list(chunk_list(symbols, 25))
 
     for chunk in symbol_chunks:
         yf_tickers = [f"{sym}.KA" for sym in chunk]
@@ -69,17 +159,34 @@ def fetch_kse100_prices():
                     
                     if pd.notna(price):
                         parsed_list.append({
+                            "Company Name": KSE_100_DICT.get(sym, sym),
                             "Symbol": sym,
                             "Price (PKR)": round(float(price), 2),
                             "Status": "Active"
                         })
                     else:
-                        parsed_list.append({"Symbol": sym, "Price (PKR)": "N/A", "Status": "No Data"})
+                        parsed_list.append({
+                            "Company Name": KSE_100_DICT.get(sym, sym),
+                            "Symbol": sym,
+                            "Price (PKR)": "N/A",
+                            "Status": "No Data"
+                        })
         except Exception:
             for sym in chunk:
-                parsed_list.append({"Symbol": sym, "Price (PKR)": "N/A", "Status": "Error"})
+                parsed_list.append({
+                    "Company Name": KSE_100_DICT.get(sym, sym),
+                    "Symbol": sym,
+                    "Price (PKR)": "N/A",
+                    "Status": "Error"
+                })
 
-    return pd.DataFrame(parsed_list)
+    df = pd.DataFrame(parsed_list)
+    
+    # Insert S.No as the first column starting from 1
+    if not df.empty:
+        df.insert(0, "S.No", range(1, len(df) + 1))
+        
+    return df
 
 # --- App Interface ---
 with st.spinner("Retrieving KSE-100 Index constituents data..."):
@@ -93,9 +200,12 @@ if not df.empty:
     col2.metric("Active Feeds", len(valid_df))
     col3.metric("Auto-Refresh Cycle", f"#{count}")
 
-    search_query = st.text_input("🔍 Filter Stock Symbol", "")
+    search_query = st.text_input("🔍 Filter by Company Name or Symbol", "")
     if search_query:
-        df = df[df["Symbol"].str.contains(search_query.upper(), na=False)]
+        df = df[
+            df["Symbol"].str.contains(search_query.upper(), na=False) |
+            df["Company Name"].str.contains(search_query, case=False, na=False)
+        ]
 
     st.markdown("### KSE-100 Index Scrips Watchlist")
     st.dataframe(
@@ -103,6 +213,9 @@ if not df.empty:
         use_container_width=True,
         hide_index=True,
         column_config={
+            "S.No": st.column_config.NumberColumn(format="%d"),
+            "Company Name": st.column_config.TextColumn("Company Name"),
+            "Symbol": st.column_config.TextColumn("Symbol"),
             "Price (PKR)": st.column_config.NumberColumn(format="Rs. %.2f"),
         }
     )
